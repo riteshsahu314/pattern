@@ -1,6 +1,6 @@
 import "./styles.scss";
-import pattern from "./data-small.json";
-// import pattern from "./data-big.json";
+//import pattern from "./data-small.json";
+import pattern from "./data-big.json";
 
 import { fabric } from "fabric";
 import {
@@ -185,9 +185,11 @@ export default class App extends Component {
       uniq: !node,
       ...restOptions
     });
+    //
     if (node) {
       this.cacheClonedNode(knotTile, node);
     } else {
+      knotTile.shouldCache = () => true;
       this.uniqNodes[colorString] = knotTile;
     }
     return knotTile;
@@ -248,6 +250,12 @@ export default class App extends Component {
     clone.cacheWidth = orgNode.cacheWidth;
     clone._cacheCanvas = orgNode._cacheCanvas;
     clone._cacheContext = orgNode._cacheContext;
+    clone.dirty = false;
+    clone.zoomX = orgNode.zoomX;
+    clone.zoomY = orgNode.zoomY;
+
+    clone.shouldCache = () => true;
+    clone.isCacheDirty = () => false;
   };
 
   getTileWidth = () => {
