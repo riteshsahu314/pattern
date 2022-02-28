@@ -89,14 +89,26 @@ function setDefaultsForFabric() {
       tr: false,
       br: false,
       bl: false,
-      ml: false,
+      ml: true,
       mt: false,
-      mr: false,
+      mr: true,
       mb: false,
       mtr: false
     }
   });
 }
+
+export const getKnotStringId = (pos = "left", knotType) => {
+  if (pos === "left") {
+    return knotType === KNOT_TYPE.LF ? "a-out" : "d-in";
+  } else if (pos === "right") {
+    return knotType === KNOT_TYPE.LF ? "d-in" : "a-out";
+  } else {
+    return pos;
+  }
+};
+
+export const CIRCLE_COLOR_RADIUS = 15;
 
 export const defaultColors = {
   "b-out": "#fff",
@@ -234,3 +246,28 @@ export const KnotPaths = {
     ]
   }
 };
+
+export const getColorCircleXPos = (pos, stretch = 1) => {
+  return (0.33333333333 * pos - 0.83333333333) * stretch;
+};
+
+export function renderIconTileCircle(color = "white", radius = 15) {
+  return (ctx, left, top) => {
+    ctx.save();
+    ctx.translate(left, top);
+
+    // ctx.save();
+    ctx.beginPath();
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "black";
+    ctx.strokeStyle = "black";
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  };
+}

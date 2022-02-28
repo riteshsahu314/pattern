@@ -1,8 +1,20 @@
-import "./styles.css";
-import pattern from "./data.json";
+import "./styles.scss";
+import pattern from "./data-small.json";
+// import pattern from "./data-big.json";
+
 import { fabric } from "fabric";
-import { CANVAS_BASE, getKnotTile, getTileId, transformPalatte } from "./utils";
+import {
+  CANVAS_BASE,
+  CIRCLE_COLOR_RADIUS,
+  getKnotStringId,
+  getKnotTile,
+  getTileId,
+  KNOT_TYPE,
+  renderIconTileCircle,
+  transformPalatte
+} from "./utils";
 import { Component } from "react";
+import BlockTileColorUpdateModal from "./BlockTileColorUpdateModal";
 
 export default class App extends Component {
   constructor(props) {
@@ -24,10 +36,8 @@ export default class App extends Component {
     this.canvas = null;
     this.selectedTileNode = null;
     this.duplicationNodes = [];
-    this.startTime = null;
     this.timeout = null;
     this.lastTap = 0;
-    this.hoveredTile = null;
     this.canvasPadding = 15;
     this.colors = {};
     this.uniqNodes = {};
@@ -37,7 +47,34 @@ export default class App extends Component {
     fabric.Object.prototype.hasRotatingPoint = false;
     fabric.Object.prototype.objectCaching = true;
 
+    const commonControlProps = {
+      cursorStyle: "pointer",
+      mouseUpHandler: this.showTileCircleColorUpdateModal,
+      render: renderIconTileCircle("white", CIRCLE_COLOR_RADIUS)
+    };
+
+    fabric.Object.prototype.controls.ml = new fabric.Control({
+      x: 0.5,
+      y: 0,
+      offsetX: 17,
+      actionName: "rightColor",
+      ...commonControlProps
+    });
+
+    fabric.Object.prototype.controls.mr = new fabric.Control({
+      x: 0,
+      y: -0.5,
+      offsetY: -17,
+      actionName: "leftColor",
+      ...commonControlProps
+    });
+
     const { tiles } = pattern;
+
+    this.setState({
+      tiles
+    });
+
     const options = {
       width: this.state.canvasWidth + this.canvasPadding,
       height: this.state.canvasHeight + this.canvasPadding,
@@ -49,6 +86,8 @@ export default class App extends Component {
     this.colors = transformPalatte(pattern.palatte);
 
     this.canvas = new fabric.Canvas(`stage`, options);
+
+    this.attachEvents();
 
     const tileWidth = this.getTileWidth();
     const tileHeight = tileWidth;
@@ -84,6 +123,38 @@ export default class App extends Component {
       }
     }
   }
+
+  attachEvents = () => {
+    this.canvas.on("mouse:dblclick", (options) => {
+      this.handleDoubleClick();
+    });
+
+    const onMouseDown = (e) => {
+      const node = e.target;
+
+      if (node?.ksType === "knot") {
+        const { tiles } = this.state;
+        this.selectedTileNode = node;
+        const selectedTile = tiles[node.i][node.j];
+        this.setState({
+          selectedTile,
+          ksType: "knot"
+        });
+        this.updateTileCircleColor(selectedTile);
+      } else if (node?.ksType === "knot-top") {
+        const { topTiles } = this.state;
+        this.selectedTileNode = node;
+        const selectedTile = topTiles[node.i];
+        this.setState({
+          selectedTile,
+          ksType: "knot-top"
+        });
+        this.updateTileCircleColor(selectedTile);
+      }
+    };
+
+    this.canvas.on("mouse:down", onMouseDown);
+  };
 
   colorsToString(colors, knotType) {
     return Object.entries(colors)
@@ -122,6 +193,54 @@ export default class App extends Component {
     return knotTile;
   };
 
+  onUpdateTile = ({ colors, knotType }, palatte = null) => {
+    const allObjects = this.canvas.getObjects();
+
+    if (palatte) {
+      this.colors = transformPalatte(palatte);
+    }
+
+    if (colors) {
+      const dt = this.selectedTileNode;
+      if (dt) {
+        if (this.state.ksType === "knot") {
+          const knotTile = this.getKnotTileNode(
+            {
+              colors: this.state.showColors ? colors : {},
+              knotType
+            },
+            {
+              width: dt.initialWidth,
+              height: dt.initialHeight,
+              i: dt.i,
+              j: dt.j,
+              top: dt.top,
+              left: dt.left
+            }
+          );
+
+          this.canvas.insertAt(
+            knotTile,
+            allObjects.findIndex(
+              (o) => o.i === dt.i && o.j === dt.j && o.ksType === "knot"
+            ),
+            true
+          );
+          this.canvas.renderAll();
+
+          const tiles = [...this.state.tiles];
+          tiles[knotTile.i][knotTile.j].colors = colors;
+          tiles[knotTile.i][knotTile.j].knotType = knotType;
+          this.setState({ tiles });
+        }
+      }
+    }
+
+    this.updateTileCircleColor(this.state.selectedTile);
+
+    this.hideTileCircleColorUpdateModal();
+  };
+
   cacheClonedNode = (clone, orgNode) => {
     clone.cacheHeight = orgNode.cacheHeight;
     clone.cacheTranslationX = orgNode.cacheTranslationX;
@@ -145,6 +264,43 @@ export default class App extends Component {
     this.setState((prev) => ({ zoom: prev.zoom - 0.2 }));
   };
 
+  showTileCircleColorUpdateModal = (e, evt) => {
+    const action = evt?.action;
+
+    if (action === "leftColor") {
+      this.setState({ editingString: "left" });
+    } else if (action === "rightColor") {
+      this.setState({ editingString: "right" });
+    } else if (action.startsWith("top")) {
+      this.setState({ editingString: action?.split("-").pop() || "" });
+    }
+  };
+
+  hideTileCircleColorUpdateModal = () => this.setState({ editingString: "" });
+
+  updateTileCircleColor = (tile) => {
+    const leftColor = tile.colors[getKnotStringId("left", tile.knotType)];
+    const rightColor = tile.colors[getKnotStringId("right", tile.knotType)];
+    fabric.Object.prototype.controls.ml.render = renderIconTileCircle(
+      this.colors?.[rightColor] || "#fff"
+    );
+    fabric.Object.prototype.controls.mr.render = renderIconTileCircle(
+      this.colors?.[leftColor] || "#fff"
+    );
+  };
+
+  handleDoubleClick = () => {
+    if (this.selectedTileNode?.ksType === "knot") {
+      this.onUpdateTile({
+        colors: this.state.selectedTile?.colors,
+        knotType:
+          this.state.selectedTile?.knotType === KNOT_TYPE.LF
+            ? KNOT_TYPE.RF
+            : KNOT_TYPE.LF
+      });
+    }
+  };
+
   render() {
     return (
       <div>
@@ -155,6 +311,19 @@ export default class App extends Component {
         <div style={{ backgroundColor: "black" }}>
           <canvas id="stage"></canvas>
         </div>
+        {this.state.editingString && (
+          <BlockTileColorUpdateModal
+            editingString={this.state.editingString}
+            palatte={pattern?.palatte}
+            handleCancel={this.hideTileCircleColorUpdateModal}
+            onUpdateTile={this.onUpdateTile}
+            colors={this.colors}
+            selectedTile={this.state.selectedTile}
+            ksType={this.state.ksType}
+            open={this.state.open}
+            pattern={pattern}
+          />
+        )}
       </div>
     );
   }
